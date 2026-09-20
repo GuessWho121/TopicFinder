@@ -11,3 +11,7 @@ data/output/*
 *.mp4
 *.wav
 *.m4a
+
+!data/input/.gitkeep
+!data/processed/.gitkeep
+!data/output/.gitkeep

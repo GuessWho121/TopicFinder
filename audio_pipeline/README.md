@@ -39,3 +39,13 @@ The first run downloads the selected Whisper model. The output directory contain
 ```
 
 Segment timestamps are measured in seconds from the start of the recording.
+
+
+## Using the Pipeline
+
+1. Place an audio or video file in `data/input/`.
+
+2. Run the pipeline from the project root:
+
+```powershell
+python -m audio_pipeline.pipeline "data/input/your_file.mp4" --output-dir "data/output" --model tiny --language en
