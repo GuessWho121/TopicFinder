@@ -2,9 +2,16 @@
 openai-whisper
 torch
 ffmpeg-python
+imageio-ffmpeg
 numpy
 
 # Person 2: Semantic Chunking & Topic Detection
 sentence-transformers
 scikit-learn
 scipy
+
+# Person 3: LLM Analysis & Streamlit Dashboard
+streamlit>=1.35
+plotly>=5.20
+google-genai>=1.0
+requests>=2.31

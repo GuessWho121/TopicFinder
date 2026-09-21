@@ -26,6 +26,12 @@ def transcribe_audio(
     if not source.is_file():
         raise FileNotFoundError(f"Normalized audio file does not exist: {source}")
     try:
+        from .audio_processor import ensure_ffmpeg_on_path
+        ensure_ffmpeg_on_path()
+    except Exception:
+        pass
+
+    try:
         import whisper
     except ImportError as error:
         raise TranscriptionError("Whisper is not installed. Run: pip install -r requirements.txt") from error

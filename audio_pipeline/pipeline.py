@@ -22,6 +22,7 @@ def run_pipeline(
     language: str | None = None,
     device: str | None = None,
     keep_normalized_audio: bool = True,
+    force: bool = False,
 ) -> Path:
     """Create ``transcript.json`` from an audio or video recording."""
     source = Path(input_file).expanduser().resolve()
@@ -31,6 +32,10 @@ def run_pipeline(
     processed_dir.mkdir(parents=True, exist_ok=True)
     normalized_audio = processed_dir / f"{source.stem}.normalized.wav"
     transcript_path = destination / "transcript.json"
+
+    if transcript_path.exists() and not force:
+        LOGGER.info("Transcript already exists at %s. Skipping transcription.", transcript_path)
+        return transcript_path
 
     LOGGER.info("Normalizing %s", source.name)
     normalize_audio(source, normalized_audio)
