@@ -1,4 +1,10 @@
+# Person 1: Audio & Transcription
 openai-whisper
 torch
 ffmpeg-python
 numpy
+
+# Person 2: Semantic Chunking & Topic Detection
+sentence-transformers
+scikit-learn
+scipy
