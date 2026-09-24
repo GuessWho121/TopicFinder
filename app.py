@@ -344,7 +344,7 @@ def _run_stage_1(source_path: Path, whisper_model: str, status_box) -> bool:
         return False
 
 
-def _run_stage_2(status_box) -> bool:
+def _run_stage_2(status_box, sensitivity: str = "medium") -> bool:
     """Run topic_pipeline: embeddings + valley detection → topic_segments.json"""
     from topic_pipeline.detector import TopicDetector
     t0 = time.time()
@@ -365,7 +365,7 @@ def _run_stage_2(status_box) -> bool:
                 transcript_data = json.load(f)
             st.session_state["transcript_data"] = transcript_data
 
-        detector = TopicDetector(window_sec=75.0, step_sec=25.0, threshold_percentile=60.0)
+        detector = TopicDetector(sensitivity=sensitivity)
         result = detector.process(transcript_data)
 
         out_path = _ROOT / "data" / "output" / "topic_segments.json"
@@ -413,6 +413,7 @@ def _run_stage_3(backend: str, api_key: str, status_box) -> bool:
 def _run_full_pipeline(
     source_path: Path,
     whisper_model: str,
+    sensitivity: str,
     backend: str,
     api_key: str,
     status_box,
@@ -423,7 +424,7 @@ def _run_full_pipeline(
         err = st.session_state["stage_errors"].get("transcription", "Unknown error")
         st.error(f"Transcription failed: {err}")
         return
-    ok = _run_stage_2(status_box)
+    ok = _run_stage_2(status_box, sensitivity=sensitivity)
     if not ok:
         err = st.session_state["stage_errors"].get("topic_detection", "Unknown error")
         st.error(f"Topic detection failed: {err}")
@@ -506,6 +507,19 @@ with st.sidebar:
     _model_hint = {"tiny": "Fastest (~3–6 min / 30 min audio)", "base": "Balanced (~6–10 min)", "small": "Best quality (~12–18 min)"}
     st.caption(_model_hint[whisper_model])
 
+    sens_choice = st.selectbox(
+        "Topic sensitivity",
+        ["Standard (Medium)", "Broad Overview (Coarse)", "Granular Highlights (Fine)"],
+        index=0,
+        label_visibility="collapsed",
+    )
+    sens_map = {
+        "Standard (Medium)": "medium",
+        "Broad Overview (Coarse)": "coarse",
+        "Granular Highlights (Fine)": "fine",
+    }
+    sens_key = sens_map[sens_choice]
+
     backend_choice = st.selectbox(
         "LLM backend",
         ["Auto", "Gemini Flash", "Ollama", "Heuristic"],
@@ -574,7 +588,7 @@ with st.sidebar:
         if run_all:
             sp = st.session_state["source_path"]
             with st.spinner("Running pipeline..."):
-                _run_full_pipeline(sp, whisper_model, backend_key, gemini_key, stage_placeholder)
+                _run_full_pipeline(sp, whisper_model, sens_key, backend_key, gemini_key, stage_placeholder)
             st.rerun()
 
         if run_chap and topics_ready:
