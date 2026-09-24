@@ -1,0 +1,138 @@
+{
+  "audio_file": "data/input/trial.mp4",
+  "duration": 207.192,
+  "total_chapters": 3,
+  "backend_used": "heuristic",
+  "backend_errors": [],
+  "similarity_curve": {
+    "timestamps": [
+      25.0,
+      50.0,
+      75.0,
+      100.0,
+      125.0,
+      150.0,
+      175.0,
+      200.0
+    ],
+    "similarities": [
+      0.886,
+      0.847,
+      0.837,
+      0.836,
+      0.855,
+      0.797,
+      0.555,
+      0.419
+    ],
+    "raw_similarities": [
+      0.949,
+      0.823,
+      0.77,
+      0.918,
+      0.819,
+      0.829,
+      0.742,
+      0.096
+    ],
+    "depth_scores": [
+      0.0,
+      0.047,
+      0.068,
+      0.07,
+      0.031,
+      0.09,
+      0.331,
+      0.468
+    ],
+    "threshold": 0.085,
+    "boundaries": [
+      153.0,
+      197.0
+    ]
+  },
+  "chapters": [
+    {
+      "section_id": 1,
+      "start_time": 0.0,
+      "end_time": 153.0,
+      "timestamp_str": "00:00",
+      "text": "A few years ago, I felt like I was stuck in a rut. So I decided to follow in the footsteps of the great American philosopher, Morgan Spurlock, and trying something new for 30 days. The idea is actually pretty simple. Think about something you've always wanted to add to your life and try it for the next 30 days. It turns out, 30 days is just about the right amount of time to add a new habit or subtract a habit, like watching the news from your life. There's a few things that I learned while doing these 30 day challenges. The first was, instead of the months flying by forgotten, the time was much more memorable. This was part of a challenge I did to take a picture every day for a month, and I remember exactly where I was and what I was doing that day. I also noticed that as I started to do more and harder 30 day challenges, myself confidence grew. I went from desk dwelling computer nerd to the kind of guy who bikes to work for fun. Even last year, I ended up hiking up Mount Kilimanjaro, the highest mountain in Africa. I would never have been that adventurous before I started my 30 day challenges. I also figured out that if you really want something badly enough, you can do anything for 30 days. Have you ever wanted to write a novel? Every November, tens of thousands of people try to write their own 50,000-word novel from scratch in 30 days. It turns out, all you have to do is write 1667 words a day for a month. So I did, by the way, the secret is not to go to sleep until you've written your words for the day. You might be sleep deprived, but you'll finish your novel. Now, is my book the next great American novel? No, I wrote it in a month. It's awful! But for the rest of my life, if I meet John Hodgman at a TED party, I don't have to say, I'm a computer scientist. No, no, if I want to, I can say, I'm a novelist.",
+      "key_moment_score": 0.64,
+      "key_moment_badge": "\ud83d\udccc Core Topic",
+      "metrics": {
+        "density": 0.64,
+        "salience": 1.0,
+        "shift_depth": 0.0,
+        "wpm": 142.7
+      },
+      "segment_count": 18,
+      "word_count": 364,
+      "key_moment_rank": 2,
+      "title": "A few years ago, I felt",
+      "summary": "A few years ago, I felt like I was stuck in a rut. So I decided to follow in the footsteps of the great American philosopher, Morgan Spurlock, and trying something new for 30 days.",
+      "takeaways": [
+        "The idea is actually pretty simple.",
+        "Think about something you've always wanted to add to your life and try it for the next 30 days.",
+        "It turns out, 30 days is just about the right amount of time to add a new habit or subtract a habit, like watching the news from your life."
+      ],
+      "key_quotes": [
+        "This was part of a challenge I did to take a picture every day for a month, and I remember exactly where I was and what I was doing that day."
+      ]
+    },
+    {
+      "section_id": 2,
+      "start_time": 153.0,
+      "end_time": 197.0,
+      "timestamp_str": "02:33",
+      "text": "So here's one last thing I'd like to mention. I learned that when I made small, sustainable changes, things I could keep doing, they were more likely to stick. There's nothing wrong with big, crazy challenges. In fact, they're a ton of fun, but they're less likely to stick. When I gave up sugar for 30 days, day 31 looked like this. So here's my question to you. What are you waiting for? I guarantee you the next 30 days are going to pass, whether you like it or not. So why not think about something? You have always wanted to try and give it a shot for the next 30 days. Thanks.",
+      "key_moment_score": 0.69,
+      "key_moment_badge": "\ud83d\udccc Core Topic",
+      "metrics": {
+        "density": 0.91,
+        "salience": 0.75,
+        "shift_depth": 0.09,
+        "wpm": 154.1
+      },
+      "segment_count": 5,
+      "word_count": 113,
+      "key_moment_rank": 1,
+      "title": "So here's one last thing I'd",
+      "summary": "So here's one last thing I'd like to mention. I learned that when I made small, sustainable changes, things I could keep doing, they were more likely to stick.",
+      "takeaways": [
+        "There's nothing wrong with big, crazy challenges.",
+        "In fact, they're a ton of fun, but they're less likely to stick.",
+        "When I gave up sugar for 30 days, day 31 looked like this."
+      ],
+      "key_quotes": [
+        "I learned that when I made small, sustainable changes, things I could keep doing, they were more likely to stick."
+      ]
+    },
+    {
+      "section_id": 3,
+      "start_time": 197.0,
+      "end_time": 208.0,
+      "timestamp_str": "03:17",
+      "text": "Thank you.",
+      "key_moment_score": 0.54,
+      "key_moment_badge": "\ud83d\udccc Core Topic",
+      "metrics": {
+        "density": 1.0,
+        "salience": 0.0,
+        "shift_depth": 0.47,
+        "wpm": 10.9
+      },
+      "segment_count": 1,
+      "word_count": 2,
+      "key_moment_rank": 3,
+      "title": "Thank you",
+      "summary": "Thank you.",
+      "takeaways": [
+        "Thank you."
+      ],
+      "key_quotes": [
+        "Thank you."
+      ]
+    }
+  ]
+}
