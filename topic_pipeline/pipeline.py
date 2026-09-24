@@ -18,6 +18,7 @@ def run_pipeline(
     *,
     window_sec: float = 75.0,
     step_sec: float = 25.0,
+    sensitivity: str = "medium",
     threshold_percentile: float = 60.0,
     min_section_sec: float = 25.0,
     model_name: str = "all-MiniLM-L6-v2",
@@ -29,7 +30,6 @@ def run_pipeline(
     output_path = destination / "topic_segments.json"
 
     if not source.is_file():
-        # Fallback to test fixture if default transcript.json isn't present
         fixture = Path("tests/fixtures/sample_transcript.json").resolve()
         if fixture.is_file():
             source = fixture
@@ -41,14 +41,16 @@ def run_pipeline(
         transcript_data = json.load(f)
 
     LOGGER.info(
-        "Segmenting %d transcript segments with window=%.1fs, step=%.1fs",
+        "Segmenting %d segments (sensitivity='%s', window=%.1fs, step=%.1fs)",
         len(transcript_data.get("segments", [])),
+        sensitivity,
         window_sec,
         step_sec,
     )
     detector = TopicDetector(
         window_sec=window_sec,
         step_sec=step_sec,
+        sensitivity=sensitivity,
         threshold_percentile=threshold_percentile,
         min_section_sec=min_section_sec,
         model_name=model_name,
@@ -59,13 +61,13 @@ def run_pipeline(
         json.dumps(results, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    LOGGER.info("Wrote %s (%d sections)", output_path, results["total_sections"])
+    LOGGER.info("Wrote %s (%d topic sections)", output_path, results["total_sections"])
     return output_path
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Detect topic shifts and extract key moments from a transcript."
+        description="Detect topic shifts and extract ranked key moments from a transcript."
     )
     parser.add_argument(
         "--input",
@@ -80,6 +82,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for topic_segments.json (default: data/output).",
     )
     parser.add_argument(
+        "--sensitivity",
+        "-s",
+        choices=["coarse", "medium", "fine"],
+        default="medium",
+        help="Segmentation granularity (coarse=fewer broad chapters, fine=granular highlights).",
+    )
+    parser.add_argument(
         "--window",
         type=float,
         default=75.0,
@@ -91,12 +100,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=25.0,
         help="Window step size in seconds (default: 25.0).",
     )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=60.0,
-        help="Valley depth threshold percentile (default: 60.0).",
-    )
     return parser
 
 
@@ -107,9 +110,9 @@ def main(argv: list[str] | None = None) -> int:
         output = run_pipeline(
             args.input,
             args.output_dir,
+            sensitivity=args.sensitivity,
             window_sec=args.window,
             step_sec=args.step,
-            threshold_percentile=args.threshold,
         )
     except (FileNotFoundError, ValueError, RuntimeError) as error:
         LOGGER.error("%s", error)
