@@ -53,6 +53,9 @@ def _otsu_threshold(scores: np.ndarray, num_bins: int = 50) -> float:
     return float(bin_centers[max_idx])
 
 
+_EMBEDDER_CACHE: dict[str, Any] = {}
+
+
 class TopicDetector:
     """Advanced semantic topic segmenter and key moment ranker for timestamped transcripts."""
 
@@ -87,9 +90,14 @@ class TopicDetector:
         self._init_model()
 
     def _init_model(self):
+        if self.model_name in _EMBEDDER_CACHE:
+            self._model = _EMBEDDER_CACHE[self.model_name]
+            return
+
         try:
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(self.model_name)
+            _EMBEDDER_CACHE[self.model_name] = self._model
         except Exception:
             # ponytail: fallback to TF-IDF when sentence-transformers is missing; upgrade: pip install sentence-transformers
             self._model = None

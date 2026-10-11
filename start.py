@@ -30,6 +30,7 @@ REQUIRED_PACKAGES = [
     ("sklearn", "scikit-learn"),
     ("scipy", "scipy"),
     ("sentence_transformers", "sentence-transformers"),
+    ("faster_whisper", "faster-whisper"),
     ("whisper", "openai-whisper"),
 ]
 

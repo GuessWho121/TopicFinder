@@ -245,18 +245,37 @@ class ChapterAnalyzer:
             a ``chapters`` list of enriched section dicts.
         """
         sections = topic_segments.get("sections", [])
-        chapters = []
-        for i, section in enumerate(sections):
-            LOGGER.info("Analyzing section %d/%d ...", i + 1, len(sections))
-            chapter = self.analyze_section(section)
-            # Add rank by key_moment_score (descending)
-            chapter["key_moment_rank"] = 0  # filled after sorting
-            chapters.append(chapter)
-            
-            # Rate limit spacing for Gemini free tier (10 RPM safe margin)
-            if self._active_backend == "gemini" and i < len(sections) - 1:
-                import time
-                time.sleep(6.5)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        max_workers = 1 if self._active_backend == "gemini" else min(8, len(sections) or 1)
+
+        if max_workers > 1:
+            LOGGER.info("Analyzing %d sections in parallel (workers=%d)...", len(sections), max_workers)
+            chapters_by_idx: dict[int, dict[str, Any]] = {}
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_idx = {
+                    executor.submit(self.analyze_section, section): i
+                    for i, section in enumerate(sections)
+                }
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        chapter = future.result()
+                    except Exception as exc:
+                        LOGGER.warning("Section %d analysis failed: %s", idx, exc)
+                        chapter = _heuristic_analyze(sections[idx].get("text", ""))
+                    chapter["key_moment_rank"] = 0
+                    chapters_by_idx[idx] = chapter
+            chapters = [chapters_by_idx[i] for i in range(len(sections))]
+        else:
+            for i, section in enumerate(sections):
+                LOGGER.info("Analyzing section %d/%d ...", i + 1, len(sections))
+                chapter = self.analyze_section(section)
+                chapter["key_moment_rank"] = 0
+                chapters.append(chapter)
+                if self._active_backend == "gemini" and i < len(sections) - 1:
+                    import time
+                    time.sleep(2.0)
 
         # Rank by key_moment_score
         sorted_idx = sorted(range(len(chapters)), key=lambda i: chapters[i].get("key_moment_score", 0), reverse=True)
