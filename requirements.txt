@@ -1,6 +1,5 @@
 # Person 1: Audio & Transcription
 faster-whisper>=1.0.0
-openai-whisper
 torch
 ffmpeg-python
 imageio-ffmpeg

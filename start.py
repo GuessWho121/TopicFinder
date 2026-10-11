@@ -31,7 +31,6 @@ REQUIRED_PACKAGES = [
     ("scipy", "scipy"),
     ("sentence_transformers", "sentence-transformers"),
     ("faster_whisper", "faster-whisper"),
-    ("whisper", "openai-whisper"),
 ]
 
 

@@ -31,10 +31,12 @@ def transcribe_audio(
     except Exception:
         pass
 
-    # Priority 1: faster-whisper (CTranslate2 INT8 backend with VAD filtering - 4x-8x faster on CPU)
     try:
         from faster_whisper import WhisperModel
+    except ImportError as error:
+        raise TranscriptionError("faster-whisper is not installed. Run: pip install faster-whisper") from error
 
+    try:
         target_device = device or ("cuda" if _is_cuda_available() else "cpu")
         compute_type = "float16" if target_device == "cuda" else "int8"
         model = WhisperModel(model_name, device=target_device, compute_type=compute_type)
@@ -57,25 +59,8 @@ def transcribe_audio(
             "language": getattr(info, "language", language or "en"),
             "segments": segments_list,
         }
-    except ImportError:
-        pass
-    except Exception as fw_err:
-        import logging
-        logging.getLogger(__name__).warning("faster-whisper failed (%s); falling back to standard whisper", fw_err)
-
-    # Priority 2: standard openai-whisper fallback
-    try:
-        import whisper
-    except ImportError as error:
-        raise TranscriptionError("Neither faster-whisper nor openai-whisper is installed.") from error
-    try:
-        model = whisper.load_model(model_name, device=device)
-        options: dict[str, Any] = {"fp16": device == "cuda"}
-        if language:
-            options["language"] = language
-        return model.transcribe(str(source), **options)
     except Exception as error:
-        raise TranscriptionError(f"Whisper transcription failed: {error}") from error
+        raise TranscriptionError(f"faster-whisper transcription failed: {error}") from error
 
 
 def _is_cuda_available() -> bool:
