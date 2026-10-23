@@ -23,6 +23,7 @@ from llm_pipeline.formatters import (
     to_raw_json,
     to_webvtt,
     to_youtube_chapters,
+    to_zip_bundle,
 )
 
 _DEMO_PATH = Path(__file__).parent.parent / "demo_data" / "sample_topic_segments.json"
@@ -152,6 +153,24 @@ def test_raw_json_format():
     assert "total_chapters" in parsed
 
 
+
+
+def test_zip_bundle_format():
+    """ZIP bundle contains all 5 output assets and is non-empty."""
+    import io
+    import zipfile
+    chap_data = _get_chapters_data()
+    bundle_bytes = to_zip_bundle(chap_data)
+    assert len(bundle_bytes) > 0, "ZIP bundle must not be empty"
+    with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as zf:
+        names = zf.namelist()
+        assert "youtube_chapters.txt" in names
+        assert "chapters.json" in names
+        assert "chapters.vtt" in names
+        assert "study_notes.md" in names
+        assert "topicfinder_output.json" in names
+
+
 # ── Runner ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -165,6 +184,7 @@ if __name__ == "__main__":
         test_podcasting2_json_format,
         test_markdown_format,
         test_raw_json_format,
+        test_zip_bundle_format,
     ]
     failed = 0
     for test in tests:

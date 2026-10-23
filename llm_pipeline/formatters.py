@@ -7,7 +7,9 @@ or dicts ready for download or display.
 
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from typing import Any
 
 
@@ -154,3 +156,15 @@ def to_markdown(chapters_data: dict[str, Any]) -> str:
 def to_raw_json(chapters_data: dict[str, Any], *, indent: int = 2) -> str:
     """Return a pretty-printed JSON string of the full chapters output."""
     return json.dumps(chapters_data, ensure_ascii=False, indent=indent)
+
+def to_zip_bundle(chapters_data: dict[str, Any]) -> bytes:
+    """Bundle all export formats into an in-memory ZIP archive."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("youtube_chapters.txt", to_youtube_chapters(chapters_data).encode("utf-8"))
+        zf.writestr("chapters.json", json.dumps(to_podcasting2_json(chapters_data), indent=2).encode("utf-8"))
+        zf.writestr("chapters.vtt", to_webvtt(chapters_data).encode("utf-8"))
+        zf.writestr("study_notes.md", to_markdown(chapters_data).encode("utf-8"))
+        zf.writestr("topicfinder_output.json", to_raw_json(chapters_data).encode("utf-8"))
+    return buffer.getvalue()
+

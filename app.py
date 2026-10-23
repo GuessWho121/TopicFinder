@@ -152,7 +152,9 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, sans-serif; font-s
 .ch-takeaways li { font-size: 13px; color: #a0a0a0; padding: 3px 0 3px 14px; position: relative; line-height: 1.55; }
 .ch-takeaways li::before { content: ''; position: absolute; left: 0; top: 11px; width: 5px; height: 1px; background: #d4a843; }
 .ch-quote { font-size: 13px; font-style: italic; color: #787878; border-left: 2px solid #282828; padding: 6px 12px; margin: 10px 0 0 0; line-height: 1.6; }
-.ch-score { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 3px; margin-left: auto; }
+.ch-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: rgba(212,168,67,0.12); color: #d4a843; border: 1px solid rgba(212,168,67,0.25); white-space: nowrap; margin-left: auto; }
+.player-bar { background: #141414; border: 1px solid #282828; border-radius: 6px; padding: 12px 18px; margin-bottom: 22px; }
+.ch-score { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 3px; }
 .score-hi { background: #0f2218; color: #4caf7d; }
 .score-md { background: #201a06; color: #d4a843; }
 .score-lo { background: #200e0e; color: #e05252; }
@@ -283,6 +285,25 @@ def _stage_html(name: str, state: str, elapsed: float | None = None) -> str:
 
 
 def _load_demo() -> None:
+    showcase_dir = _ROOT / "showcase_output"
+    ch_path = showcase_dir / "stage3_chapters.json"
+    ts_path = showcase_dir / "stage2_topic_segments.json"
+    tr_path = showcase_dir / "stage1_transcript.json"
+
+    if ch_path.is_file() and ts_path.is_file() and tr_path.is_file():
+        with open(tr_path, encoding="utf-8") as f:
+            st.session_state["transcript_data"] = json.load(f)
+        with open(ts_path, encoding="utf-8") as f:
+            st.session_state["topic_segments"] = json.load(f)
+        with open(ch_path, encoding="utf-8") as f:
+            st.session_state["chapters_data"] = json.load(f)
+        st.session_state["source_name"] = "30_day_challenges.mp3 (Showcase Demo)"
+        st.session_state["stage_times"] = {"transcription": 14.2, "topic_detection": 3.8, "llm": 5.1}
+        st.session_state["stage_errors"] = {}
+        st.session_state["backend_label"] = "gemini-3.5-flash-lite"
+        st.toast("Full showcase demo loaded successfully across all stages!")
+        return
+
     demo_path = _ROOT / "demo_data" / "sample_topic_segments.json"
     if not demo_path.is_file():
         st.error("Demo fixture not found.")
@@ -296,7 +317,7 @@ def _load_demo() -> None:
     st.session_state["stage_times"] = {"transcription": None, "topic_detection": 0.0}
     st.session_state["stage_errors"] = {}
     st.session_state["backend_label"] = "—"
-    st.toast("Demo loaded. Click 'Analyze chapters' to continue.")
+    st.toast("Demo loaded. Click 'Process file' or 'Re-analyze' to continue.")
 
 
 def _save_uploaded_file(uploaded_file) -> Path:
@@ -417,18 +438,25 @@ def _run_full_pipeline(
     backend: str,
     api_key: str,
     status_box,
+    progress_bar=None,
 ) -> None:
-    """Run all three stages sequentially, updating status_box as we go."""
+    """Run all three stages sequentially, updating status_box and progress_bar as we go."""
+    if progress_bar:
+        progress_bar.progress(10, text="[Stage 1/3] Transcribing audio with faster-whisper (INT8 + VAD)...")
     ok = _run_stage_1(source_path, whisper_model, status_box)
     if not ok:
         err = st.session_state["stage_errors"].get("transcription", "Unknown error")
         st.error(f"Transcription failed: {err}")
         return
+    if progress_bar:
+        progress_bar.progress(45, text="[Stage 2/3] Detecting topic shifts with Otsu adaptive thresholding...")
     ok = _run_stage_2(status_box, sensitivity=sensitivity)
     if not ok:
         err = st.session_state["stage_errors"].get("topic_detection", "Unknown error")
         st.error(f"Topic detection failed: {err}")
         return
+    if progress_bar:
+        progress_bar.progress(75, text="[Stage 3/3] Synthesizing chapters, summaries & takeaways with LLM...")
     ok = _run_stage_3(backend, api_key, status_box)
     if not ok:
         err = st.session_state["stage_errors"].get("llm", "Unknown error")
@@ -445,6 +473,8 @@ def _run_full_pipeline(
         + _stage_html("Chapter synthesis (LLM)", "done", e3)
         + '</ul>', unsafe_allow_html=True,
     )
+    if progress_bar:
+        progress_bar.progress(100, text="Pipeline processing complete!")
     st.toast("Pipeline complete.")
 
 
@@ -587,14 +617,17 @@ with st.sidebar:
 
         if run_all:
             sp = st.session_state["source_path"]
+            prog_bar = st.progress(0, text="Initializing faster-whisper pipeline...")
             with st.spinner("Running pipeline..."):
-                _run_full_pipeline(sp, whisper_model, sens_key, backend_key, gemini_key, stage_placeholder)
+                _run_full_pipeline(sp, whisper_model, sens_key, backend_key, gemini_key, stage_placeholder, progress_bar=prog_bar)
             st.rerun()
 
         if run_chap and topics_ready:
             status_ph2 = st.empty()
+            prog_bar = st.progress(50, text="Re-analyzing chapters in parallel...")
             with st.spinner("Re-analyzing chapters..."):
                 _run_stage_3(backend_key, gemini_key, status_ph2)
+            prog_bar.progress(100, text="Chapters re-synthesized successfully!")
             st.rerun()
 
     # ── Demo shortcut ──
@@ -634,6 +667,28 @@ st.markdown(
     '<p class="page-sub">Upload an audio or video file. The pipeline transcribes, detects topic shifts, and generates structured chapters automatically.</p>',
     unsafe_allow_html=True,
 )
+
+media_bytes = st.session_state.get("media_bytes")
+media_mime  = st.session_state.get("media_mime", "audio/mpeg")
+seek_time   = st.session_state.get("seek_time", 0.0)
+
+if media_bytes is not None:
+    is_video = media_mime.startswith("video/")
+    seek_ts = _fmt_ts(seek_time)
+    with st.container():
+        st.markdown(
+            f'<div class="player-bar">'
+            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+            f'<span style="font-size:12px;font-weight:600;color:#d4a843;">▶ Interactive Player &nbsp;&middot;&nbsp; Seek Position: <span style="font-family:JetBrains Mono;color:#ededed;font-weight:700;">{seek_ts}</span></span>'
+            f'<span style="font-size:11px;color:#606060;">{src_name}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if is_video:
+            st.video(media_bytes, start_time=int(seek_time))
+        else:
+            st.audio(media_bytes, format=media_mime, start_time=int(seek_time))
+        st.markdown('</div>', unsafe_allow_html=True)
 
 tab_sim, tab_ch, tab_tr, tab_pl, tab_ex = st.tabs([
     "Similarity", "Chapters", "Transcript", "Player", "Export",
@@ -808,7 +863,49 @@ with tab_ch:
                 f'{len(chapters)} chapters &nbsp;&middot;&nbsp; backend: {chap_data.get("backend_used", "—")}'
                 f'</div>', unsafe_allow_html=True,
             )
+            col_f1, col_f2 = st.columns([2, 1])
+            with col_f1:
+                filter_choice = st.selectbox(
+                    "Filter by Topic Importance",
+                    ["All Chapters", "🔥 Major Shift Only", "⭐ Key Concept & Above", "Top 3 Ranked Moments"],
+                    index=0,
+                    key="filter_ch_importance",
+                )
+            with col_f2:
+                search_term = st.text_input(
+                    "Search Chapters",
+                    placeholder="Search keywords...",
+                    key="filter_ch_search",
+                )
+
+            filtered_chapters = []
             for ch in chapters:
+                score = ch.get("key_moment_score", 0.0)
+                rank = ch.get("key_moment_rank", 999)
+                badge = ch.get("key_moment_badge", "📌 Core Topic")
+
+                if filter_choice == "🔥 Major Shift Only" and "Major Shift" not in badge:
+                    continue
+                if filter_choice == "⭐ Key Concept & Above" and score < 0.50:
+                    continue
+                if filter_choice == "Top 3 Ranked Moments" and rank > 3:
+                    continue
+
+                if search_term:
+                    q = search_term.lower()
+                    haystack = f"{ch.get('title', '')} {ch.get('summary', '')} {' '.join(ch.get('takeaways', []))} {' '.join(ch.get('key_quotes', []))}".lower()
+                    if q not in haystack:
+                        continue
+
+                filtered_chapters.append(ch)
+
+            st.markdown(
+                f'<div style="font-size:12px;color:#606060;margin-bottom:14px;">'
+                f'Showing {len(filtered_chapters)} of {len(chapters)} chapters &nbsp;&middot;&nbsp; backend: {chap_data.get("backend_used", "—")}'
+                f'</div>', unsafe_allow_html=True,
+            )
+
+            for ch in filtered_chapters:
                 ts        = _fmt_ts(ch.get("start_time", 0.0))
                 title     = ch.get("title", "Untitled")
                 summary   = ch.get("summary", "")
@@ -816,9 +913,11 @@ with tab_ch:
                 key_quotes= ch.get("key_quotes", [])
                 score     = ch.get("key_moment_score", 0.0)
                 rank      = ch.get("key_moment_rank", 0)
+                badge     = ch.get("key_moment_badge", "📌 Core Topic")
                 sec_id    = ch.get("section_id", 0)
 
                 score_html = f'<span class="ch-score {_score_cls(score)}">{score:.2f}</span>'
+                badge_html = f'<span class="ch-badge">{badge}</span>'
                 ta_html = ""
                 if takeaways:
                     items = "".join(f"<li>{t}</li>" for t in takeaways)
@@ -833,6 +932,7 @@ with tab_ch:
                       <div class="ch-head">
                         <span class="ch-ts">{ts}</span>
                         <span class="ch-title">{title}</span>
+                        {badge_html}
                         {score_html}
                         <span class="ch-rank">#{rank}</span>
                       </div>
@@ -843,11 +943,12 @@ with tab_ch:
                     </div>""",
                     unsafe_allow_html=True,
                 )
-                col_btn, _ = st.columns([1, 7])
+                col_btn, _ = st.columns([1.5, 6.5])
                 with col_btn:
-                    if st.button(f"Seek {ts}", key=f"seek_{sec_id}"):
+                    if st.button(f"▶ Seek {ts}", key=f"seek_{sec_id}"):
                         st.session_state["seek_time"] = ch.get("start_time", 0.0)
-                        st.toast(f"Seek set to {ts}. Switch to the Player tab.")
+                        st.toast(f"Seek target updated to {ts}!")
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -896,7 +997,7 @@ with tab_tr:
                 )
 
             title_span = f'<span class="tr-title">{ch_title}</span>' if ch_title else ""
-            html += f'<div class="tr-head">{ts_str} {title_span}</div><div>{text}</div><hr class="tr-divider">'
+            html += f'<div class="tr-head"><a href="#tr-{sec_id}" style="color:#d4a843;text-decoration:none;">▶ {ts_str}</a> {title_span}</div><div>{text}</div><hr class="tr-divider">'
 
         st.markdown(f'<div class="transcript-wrap">{html}</div>', unsafe_allow_html=True)
 
@@ -973,7 +1074,7 @@ with tab_pl:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_ex:
     from llm_pipeline.formatters import (
-        to_markdown, to_podcasting2_json, to_raw_json, to_webvtt, to_youtube_chapters,
+        to_markdown, to_podcasting2_json, to_raw_json, to_webvtt, to_youtube_chapters, to_zip_bundle,
     )
 
     chap_data = st.session_state.get("chapters_data")
@@ -985,7 +1086,21 @@ with tab_ex:
             unsafe_allow_html=True,
         )
     else:
-        def _export_block(label, desc, content, fname, mime, key):
+        # ── Multi-Format Zip Bundle Export ──
+        base_name = Path(src_name).stem if src_name else "topicfinder"
+        zip_bytes = to_zip_bundle(chap_data)
+        st.download_button(
+            label="📦 Download All Formats Bundle (.zip)",
+            data=zip_bytes,
+            file_name=f"{base_name}_chapters_all.zip",
+            mime="application/zip",
+            type="primary",
+            use_container_width=True,
+            help="Download all 5 files (YouTube chapters, Podcasting 2.0, WebVTT, Markdown notes, Raw JSON) in a single ZIP",
+        )
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        def _export_block(label, desc, content, fname, mime, key, lang="text"):
             st.markdown(
                 f'<div class="export-head">{label}</div>'
                 f'<div class="export-desc">{desc}</div>',
@@ -993,26 +1108,28 @@ with tab_ex:
             )
             c1, c2 = st.columns([5, 1])
             with c1:
-                st.text_area(label, content, height=130, key=f"ta_{key}", label_visibility="collapsed")
+                with st.expander("📋 One-Click Copy View (Native Copy Icon in Top-Right)", expanded=(key == "yt")):
+                    st.code(content, language=lang)
+                st.text_area(label, content, height=90, key=f"ta_{key}", label_visibility="collapsed")
             with c2:
                 st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
-                st.download_button("Download", data=content.encode(), file_name=fname,
+                st.download_button("Download", data=content.encode("utf-8"), file_name=fname,
                                    mime=mime, key=f"dl_{key}", use_container_width=True)
             st.markdown("<hr>", unsafe_allow_html=True)
 
         _export_block("YouTube chapters",
                       "Paste into your YouTube video description. First timestamp must be 00:00.",
-                      to_youtube_chapters(chap_data), "youtube_chapters.txt", "text/plain", "yt")
+                      to_youtube_chapters(chap_data), "youtube_chapters.txt", "text/plain", "yt", lang="text")
         _export_block("Podcasting 2.0",
                       "chapters.json — compatible with Apple Podcasts, Pocket Casts, Podcasting 2.0.",
                       json.dumps(to_podcasting2_json(chap_data), indent=2),
-                      "chapters.json", "application/json", "pc2")
+                      "chapters.json", "application/json", "pc2", lang="json")
         _export_block("WebVTT",
                       'Chapter track for HTML5 players — use as <track kind="chapters">.',
-                      to_webvtt(chap_data), "chapters.vtt", "text/vtt", "vtt")
+                      to_webvtt(chap_data), "chapters.vtt", "text/vtt", "vtt", lang="text")
         _export_block("Markdown notes",
                       "Study guide with timestamps, summaries, takeaways, and key quotes.",
-                      to_markdown(chap_data), "study_notes.md", "text/markdown", "md")
+                      to_markdown(chap_data), "study_notes.md", "text/markdown", "md", lang="markdown")
         _export_block("Raw JSON",
                       "Full machine-readable output for downstream processing.",
-                      to_raw_json(chap_data), "topicfinder_output.json", "application/json", "raw")
+                      to_raw_json(chap_data), "topicfinder_output.json", "application/json", "raw", lang="json")
