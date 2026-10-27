@@ -82,6 +82,9 @@ def to_podcasting2_json(chapters_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+to_podcasting20_json = to_podcasting2_json
+
+
 def to_webvtt(chapters_data: dict[str, Any]) -> str:
     """Return a WebVTT chapter track string.
 

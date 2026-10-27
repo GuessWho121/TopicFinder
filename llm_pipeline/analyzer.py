@@ -32,6 +32,36 @@ Transcript section:
 \"\"\"
 """
 
+_BATCH_PROMPT_TEMPLATE = """You are an expert podcast and lecture chapter editor.
+
+Below is the full transcript of a recording, split into {total_sections} consecutive candidate topic sections with timestamps.
+Having the entire recording context from beginning to end, analyze each section and generate high-quality, distinct, non-repetitive chapter titles, summaries, key takeaways, and memorable verbatim quotes.
+
+Sections:
+{sections_text}
+
+Output ONLY a valid JSON object with a single "chapters" array matching this exact schema:
+{{
+  "chapters": [
+    {{
+      "section_id": <int matching the section id>,
+      "title": "<punchy 3-6 word chapter heading>",
+      "summary": "<1-2 sentences describing the main concept in this section>",
+      "takeaways": [
+        "<actionable or insightful bullet point 1>",
+        "<actionable or insightful bullet point 2>"
+      ],
+      "key_quotes": [
+        "<memorable verbatim phrase from this section's text>"
+      ]
+    }}
+  ]
+}}
+
+Ensure every section_id from 1 to {total_sections} is included in the "chapters" list in chronological order.
+Respond with ONLY the JSON object, no markdown fences, no explanation.
+"""
+
 
 def _parse_llm_json(raw: str) -> dict[str, Any]:
     """Extract the first JSON object from an LLM response string."""
@@ -101,6 +131,72 @@ def _gemini_analyze(text: str, api_key: str, model: str = "models/gemini-3.5-fla
     )
     
     return _parse_llm_json(response.text)
+
+
+def _gemini_analyze_batch(
+    sections: list[dict[str, Any]],
+    api_key: str,
+    model: str = "models/gemini-3.5-flash-lite",
+) -> list[dict[str, Any]]:
+    """Analyze all sections in a single unified Gemini API call with full recording context."""
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError as err:
+        raise RuntimeError("google-genai not installed. Run: pip install google-genai") from err
+
+    client = genai.Client(api_key=api_key)
+
+    formatted_sections = []
+    for idx, s in enumerate(sections):
+        sid = s.get("section_id", idx + 1)
+        ts_str = s.get("timestamp_str", f"{s.get('start_time', 0.0):.1f}s")
+        text = s.get("text", "").strip()
+        formatted_sections.append(
+            f"--- Section {sid} (Timestamp: {ts_str}) ---\n{text}"
+        )
+
+    full_text = "\n\n".join(formatted_sections)
+    prompt = _BATCH_PROMPT_TEMPLATE.format(
+        total_sections=len(sections),
+        sections_text=full_text,
+    )
+
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        temperature=0.2,
+    )
+
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=config,
+    )
+
+    parsed = _parse_llm_json(response.text)
+    chapters_list = parsed.get("chapters", [])
+    if not isinstance(chapters_list, list) or len(chapters_list) == 0:
+        raise ValueError("Gemini batch response did not contain a valid 'chapters' list.")
+
+    by_id = {ch.get("section_id"): ch for ch in chapters_list if isinstance(ch, dict)}
+    enriched = []
+    for idx, s in enumerate(sections):
+        sid = s.get("section_id", idx + 1)
+        data = by_id.get(sid) or (chapters_list[idx] if idx < len(chapters_list) else {})
+        title = data.get("title") or f"Chapter {sid}"
+        summary = data.get("summary") or ""
+        takeaways = data.get("takeaways") if isinstance(data.get("takeaways"), list) else []
+        key_quotes = data.get("key_quotes") if isinstance(data.get("key_quotes"), list) else []
+
+        enriched.append({
+            **s,
+            "title": str(title).strip(),
+            "summary": str(summary).strip(),
+            "takeaways": takeaways,
+            "key_quotes": key_quotes,
+            "key_moment_rank": 0,
+        })
+    return enriched
 
 
 # ---------------------------------------------------------------------------
@@ -247,35 +343,57 @@ class ChapterAnalyzer:
         sections = topic_segments.get("sections", [])
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        max_workers = 1 if self._active_backend == "gemini" else min(8, len(sections) or 1)
+        chapters: list[dict[str, Any]] = []
 
-        if max_workers > 1:
-            LOGGER.info("Analyzing %d sections in parallel (workers=%d)...", len(sections), max_workers)
-            chapters_by_idx: dict[int, dict[str, Any]] = {}
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_idx = {
-                    executor.submit(self.analyze_section, section): i
-                    for i, section in enumerate(sections)
-                }
-                for future in as_completed(future_to_idx):
-                    idx = future_to_idx[future]
-                    try:
-                        chapter = future.result()
-                    except Exception as exc:
-                        LOGGER.warning("Section %d analysis failed: %s", idx, exc)
-                        chapter = _heuristic_analyze(sections[idx].get("text", ""))
+        # 1. High-speed single-call full-context analysis for Gemini
+        if self._active_backend == "gemini" and sections:
+            LOGGER.info(
+                "Analyzing all %d sections in a single unified Gemini API call with full context...",
+                len(sections),
+            )
+            try:
+                chapters = _gemini_analyze_batch(sections, self._gemini_api_key, self._gemini_model)
+                LOGGER.info("✓ Gemini full-context batch analysis completed successfully in 1 call.")
+            except Exception as exc:
+                err_msg = str(exc)
+                LOGGER.warning(
+                    "Gemini unified batch analysis failed: %s. Falling back to section-by-section analysis.",
+                    err_msg,
+                )
+                self._backend_errors.append(f"Gemini batch fallback: {err_msg}")
+                chapters = []
+
+        # 2. Section-by-section fallback (Ollama, heuristic, or Gemini batch failure)
+        if not chapters and sections:
+            max_workers = 1 if self._active_backend == "gemini" else min(8, len(sections) or 1)
+
+            if max_workers > 1 and len(sections) > 1:
+                LOGGER.info("Analyzing %d sections in parallel (workers=%d)...", len(sections), max_workers)
+                chapters_by_idx: dict[int, dict[str, Any]] = {}
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_idx = {
+                        executor.submit(self.analyze_section, section): i
+                        for i, section in enumerate(sections)
+                    }
+                    for future in as_completed(future_to_idx):
+                        idx = future_to_idx[future]
+                        try:
+                            chapter = future.result()
+                        except Exception as exc:
+                            LOGGER.warning("Section %d analysis failed: %s", idx, exc)
+                            chapter = _heuristic_analyze(sections[idx].get("text", ""))
+                        chapter["key_moment_rank"] = 0
+                        chapters_by_idx[idx] = chapter
+                chapters = [chapters_by_idx[i] for i in range(len(sections))]
+            else:
+                for i, section in enumerate(sections):
+                    LOGGER.info("Analyzing section %d/%d ...", i + 1, len(sections))
+                    chapter = self.analyze_section(section)
                     chapter["key_moment_rank"] = 0
-                    chapters_by_idx[idx] = chapter
-            chapters = [chapters_by_idx[i] for i in range(len(sections))]
-        else:
-            for i, section in enumerate(sections):
-                LOGGER.info("Analyzing section %d/%d ...", i + 1, len(sections))
-                chapter = self.analyze_section(section)
-                chapter["key_moment_rank"] = 0
-                chapters.append(chapter)
-                if self._active_backend == "gemini" and i < len(sections) - 1:
-                    import time
-                    time.sleep(2.0)
+                    chapters.append(chapter)
+                    if self._active_backend == "gemini" and i < len(sections) - 1:
+                        import time
+                        time.sleep(2.0)
 
         # Rank by key_moment_score
         sorted_idx = sorted(range(len(chapters)), key=lambda i: chapters[i].get("key_moment_score", 0), reverse=True)

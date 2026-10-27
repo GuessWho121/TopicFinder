@@ -171,6 +171,53 @@ def test_zip_bundle_format():
         assert "topicfinder_output.json" in names
 
 
+def test_gemini_analyze_batch_mocked():
+    """Verify _gemini_analyze_batch processes all sections in a single call."""
+    from unittest.mock import MagicMock
+    from llm_pipeline.analyzer import _gemini_analyze_batch
+    import google.genai
+
+    mock_response = MagicMock()
+    mock_response.text = json.dumps({
+        "chapters": [
+            {
+                "section_id": 1,
+                "title": "Starting New Habits",
+                "summary": "Trying something new for 30 days is memorable.",
+                "takeaways": ["Take daily action", "Memories stick"],
+                "key_quotes": ["30 days is just about right"]
+            },
+            {
+                "section_id": 2,
+                "title": "Growing Self Confidence",
+                "summary": "Challenges boost adventurousness.",
+                "takeaways": ["Bike to work", "Hike Kilimanjaro"],
+                "key_quotes": ["You can do anything for 30 days"]
+            }
+        ]
+    })
+
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+    original_client = google.genai.Client
+
+    try:
+        google.genai.Client = MagicMock(return_value=mock_client)
+        sections = [
+            {"section_id": 1, "start_time": 0.0, "end_time": 75.0, "text": "Section 1 text"},
+            {"section_id": 2, "start_time": 75.0, "end_time": 125.0, "text": "Section 2 text"},
+        ]
+        res = _gemini_analyze_batch(sections, api_key="test-key")
+        assert len(res) == 2
+        assert res[0]["title"] == "Starting New Habits"
+        assert res[1]["title"] == "Growing Self Confidence"
+        assert len(res[0]["takeaways"]) == 2
+        # Verify exactly ONE API call was made for both sections
+        assert mock_client.models.generate_content.call_count == 1
+    finally:
+        google.genai.Client = original_client
+
+
 # ── Runner ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

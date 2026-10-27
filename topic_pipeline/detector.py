@@ -95,8 +95,10 @@ class TopicDetector:
             return
 
         try:
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self.model_name)
+            self._model = SentenceTransformer(self.model_name, device=device)
             _EMBEDDER_CACHE[self.model_name] = self._model
         except Exception:
             # ponytail: fallback to TF-IDF when sentence-transformers is missing; upgrade: pip install sentence-transformers

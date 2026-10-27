@@ -86,8 +86,8 @@ def run_full_pipeline(
     vtt_text = formatters.to_webvtt(chapters_data)
     (dest / "chapters.vtt").write_text(vtt_text + "\n", encoding="utf-8")
 
-    p20_text = formatters.to_podcasting20_json(chapters_data)
-    (dest / "podcasting20_chapters.json").write_text(p20_text + "\n", encoding="utf-8")
+    p20_data = formatters.to_podcasting2_json(chapters_data)
+    (dest / "podcasting20_chapters.json").write_text(json.dumps(p20_data, indent=2) + "\n", encoding="utf-8")
 
     LOGGER.info("==================================================")
     LOGGER.info("✓ All outputs saved to: %s", dest)
