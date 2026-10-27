@@ -16,7 +16,11 @@ from pathlib import Path
 # Ensure repo root is on path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from llm_pipeline.analyzer import ChapterAnalyzer, _heuristic_analyze
+from llm_pipeline.analyzer import (
+    ChapterAnalyzer,
+    _heuristic_analyze,
+    _parse_llm_json_list,
+)
 from llm_pipeline.formatters import (
     to_markdown,
     to_podcasting2_json,
@@ -53,6 +57,24 @@ def test_heuristic_analyze_empty_text():
     """Heuristic handles empty text gracefully."""
     result = _heuristic_analyze("")
     assert "title" in result
+
+
+def test_parse_llm_json_list_formats():
+    """_parse_llm_json_list correctly extracts lists from raw, fenced, and nested formats."""
+    # 1. Plain array
+    raw1 = '[{"section_id": 1, "title": "Introduction", "summary": "Start of talk."}]'
+    res1 = _parse_llm_json_list(raw1)
+    assert len(res1) == 1 and res1[0]["title"] == "Introduction"
+
+    # 2. Markdown fenced json
+    raw2 = '```json\n[{"section_id": 2, "title": "Key Concept", "summary": "Core topic."}]\n```'
+    res2 = _parse_llm_json_list(raw2)
+    assert len(res2) == 1 and res2[0]["title"] == "Key Concept"
+
+    # 3. Wrapped in dict under 'chapters'
+    raw3 = '{"chapters": [{"section_id": 3, "title": "Wrap Up", "summary": "Concluding thoughts."}]}'
+    res3 = _parse_llm_json_list(raw3)
+    assert len(res3) == 1 and res3[0]["title"] == "Wrap Up"
 
 
 def test_chapter_analyzer_heuristic_all_sections():

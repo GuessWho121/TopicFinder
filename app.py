@@ -422,6 +422,23 @@ def _run_stage_3(backend: str, api_key: str, status_box) -> bool:
         backend_errors = result.get("backend_errors", [])
         if backend_errors:
             st.session_state["stage_errors"]["llm_fallback"] = backend_errors[0]
+
+        # Persist results locally
+        try:
+            out_dir = _ROOT / "data" / "output"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "chapters.json").write_text(
+                json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            from llm_pipeline import formatters
+            (out_dir / "youtube_chapters.txt").write_text(formatters.to_youtube_chapters(result), encoding="utf-8")
+            (out_dir / "summary_notes.md").write_text(formatters.to_markdown(result), encoding="utf-8")
+            (out_dir / "chapters.vtt").write_text(formatters.to_webvtt(result), encoding="utf-8")
+            p2_data = formatters.to_podcasting2_json(result)
+            (out_dir / "podcasting20_chapters.json").write_text(json.dumps(p2_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
         elapsed = time.time() - t0
         st.session_state["stage_times"]["llm"] = elapsed
         st.session_state["stage_errors"].pop("llm", None)
@@ -536,6 +553,14 @@ with st.sidebar:
     )
     _model_hint = {"tiny": "Fastest (~3–6 min / 30 min audio)", "base": "Balanced (~6–10 min)", "small": "Best quality (~12–18 min)"}
     st.caption(_model_hint[whisper_model])
+    try:
+        import torch
+        if torch.cuda.is_available():
+            st.caption(f"🚀 CUDA GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            st.caption("⚙️ Hardware: CPU")
+    except Exception:
+        pass
 
     sens_choice = st.selectbox(
         "Topic sensitivity",
@@ -826,7 +851,7 @@ with tab_sim:
             ),
             height=400, margin=dict(l=0, r=0, t=36, b=0), hovermode="x unified",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         if not chap_data:
             st.markdown(

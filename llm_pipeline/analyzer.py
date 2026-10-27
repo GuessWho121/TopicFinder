@@ -80,6 +80,33 @@ def _parse_llm_json(raw: str) -> dict[str, Any]:
         raise
 
 
+def _parse_llm_json_list(raw: str) -> list[dict[str, Any]]:
+    """Extract a list of JSON objects from an LLM response string."""
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"\s*```$", "", raw, flags=re.MULTILINE)
+    raw = raw.strip()
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for k in ("chapters", "sections", "items", "results"):
+                if k in data and isinstance(data[k], list):
+                    return data[k]
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback regex search for outer [...]
+    match = re.search(r"\[\s*\{.*\}\s*\]", raw, re.DOTALL)
+    if match:
+        data = json.loads(match.group())
+        if isinstance(data, list):
+            return data
+
+    raise ValueError(f"Could not parse valid JSON list from LLM output (length={len(raw)})")
+
+
 # ---------------------------------------------------------------------------
 # Backend: Heuristic (pure Python)
 # ---------------------------------------------------------------------------
@@ -116,13 +143,20 @@ def _heuristic_analyze(text: str) -> dict[str, Any]:
 # Backend: Gemini Flash
 # ---------------------------------------------------------------------------
 
+_GEMINI_CLIENT_CACHE: dict[str, Any] = {}
+
+
 def _gemini_analyze(text: str, api_key: str, model: str = "models/gemini-3.5-flash-lite") -> dict[str, Any]:
     try:
         from google import genai
     except ImportError as err:
         raise RuntimeError("google-genai not installed. Run: pip install google-genai") from err
 
-    client = genai.Client(api_key=api_key)
+    # Reuse client across calls — construction has auth/network overhead
+    if api_key not in _GEMINI_CLIENT_CACHE:
+        _GEMINI_CLIENT_CACHE[api_key] = genai.Client(api_key=api_key)
+    client = _GEMINI_CLIENT_CACHE[api_key]
+
     prompt = _PROMPT_TEMPLATE.format(text=text[:3000])  # Guard token limits
     
     response = client.models.generate_content(
@@ -145,7 +179,9 @@ def _gemini_analyze_batch(
     except ImportError as err:
         raise RuntimeError("google-genai not installed. Run: pip install google-genai") from err
 
-    client = genai.Client(api_key=api_key)
+    if api_key not in _GEMINI_CLIENT_CACHE:
+        _GEMINI_CLIENT_CACHE[api_key] = genai.Client(api_key=api_key)
+    client = _GEMINI_CLIENT_CACHE[api_key]
 
     formatted_sections = []
     for idx, s in enumerate(sections):
@@ -173,8 +209,7 @@ def _gemini_analyze_batch(
         config=config,
     )
 
-    parsed = _parse_llm_json(response.text)
-    chapters_list = parsed.get("chapters", [])
+    chapters_list = _parse_llm_json_list(response.text)
     if not isinstance(chapters_list, list) or len(chapters_list) == 0:
         raise ValueError("Gemini batch response did not contain a valid 'chapters' list.")
 
@@ -400,7 +435,8 @@ class ChapterAnalyzer:
         for rank, idx in enumerate(sorted_idx, start=1):
             chapters[idx]["key_moment_rank"] = rank
 
-        actual_backend = "heuristic" if self._backend_errors else self._active_backend
+        any_llm = any(ch.get("summary") and not ch.get("summary").startswith(ch.get("text", "")[:40]) for ch in chapters)
+        actual_backend = self._active_backend if (not self._backend_errors or any_llm) else "heuristic"
         return {
             "audio_file": topic_segments.get("audio_file", ""),
             "duration": topic_segments.get("duration", 0.0),

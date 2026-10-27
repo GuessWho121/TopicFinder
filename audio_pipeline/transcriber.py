@@ -215,6 +215,12 @@ def transcribe_audio(
         raise TranscriptionError(f"All transcription backends failed. Last error: {whisper_cpu_err}") from whisper_cpu_err
 
 
+def _is_cuda_available() -> bool:
+    """Return True if any CUDA backend is available."""
+    has_cuda, _ = _get_gpu_info()
+    return has_cuda
+
+
 def format_transcript(
     result: dict[str, Any], *, audio_file: str, duration: float
 ) -> dict[str, Any]:

@@ -98,7 +98,12 @@ class TopicDetector:
             import torch
             device = "cuda" if torch.cuda.is_available() else "cpu"
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self.model_name, device=device)
+            try:
+                # Load from local cache for instant sub-second startup
+                self._model = SentenceTransformer(self.model_name, device=device, local_files_only=True)
+            except Exception:
+                # Fall back to online download if cache is missing
+                self._model = SentenceTransformer(self.model_name, device=device)
             _EMBEDDER_CACHE[self.model_name] = self._model
         except Exception:
             # ponytail: fallback to TF-IDF when sentence-transformers is missing; upgrade: pip install sentence-transformers
@@ -108,7 +113,7 @@ class TopicDetector:
         if not texts:
             return np.empty((0, 384))
         if self._model:
-            return self._model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+            return self._model.encode(texts, batch_size=64, convert_to_numpy=True, normalize_embeddings=True)
 
         from sklearn.feature_extraction.text import TfidfVectorizer
         vec = TfidfVectorizer(max_features=384, stop_words="english")
@@ -141,26 +146,58 @@ class TopicDetector:
             cur += self.step_sec
         return windows
 
-    def _snap_to_boundary(self, target_time: float, segments: list[dict[str, Any]]) -> float:
-        """Snap a coarse window boundary timestamp to the exact closest preceding sentence end."""
+    def _snap_to_boundary(
+        self,
+        target_time: float,
+        segments: list[dict[str, Any]],
+        search_window: float = 12.0,
+    ) -> float:
+        """Snap a coarse window boundary timestamp to the closest true sentence completion or audio pause."""
         if not segments or target_time <= 0:
             return 0.0
 
+        candidates = []
+        for i, seg in enumerate(segments):
+            end_t = float(seg.get("end", 0.0))
+            dist = abs(end_t - target_time)
+            if dist <= search_window:
+                txt = seg.get("text", "").strip()
+                # 1. Full sentence completion (. ! ?)
+                is_sentence_end = bool(txt and txt[-1] in ".!?")
+                # 2. Major clause completion (, ; : —)
+                is_clause_end = bool(txt and txt[-1] in ",;:—–-")
+                # 3. Audio silence pause between consecutive segments
+                next_start = float(segments[i + 1].get("start", end_t)) if i + 1 < len(segments) else end_t
+                pause = max(0.0, next_start - end_t)
+                candidates.append((dist, end_t, is_sentence_end, is_clause_end, pause))
+
+        # Priority 1: True sentence completion (. ! ?)
+        sent_candidates = [c for c in candidates if c[2]]
+        if sent_candidates:
+            sent_candidates.sort(key=lambda c: c[0])
+            return sent_candidates[0][1]
+
+        # Priority 2: Noticeable speech pause (> 0.25s silence gap)
+        pause_candidates = [c for c in candidates if c[4] > 0.25]
+        if pause_candidates:
+            pause_candidates.sort(key=lambda c: c[0])
+            return pause_candidates[0][1]
+
+        # Priority 3: Major clause completion (, ;)
+        clause_candidates = [c for c in candidates if c[3]]
+        if clause_candidates:
+            clause_candidates.sort(key=lambda c: c[0])
+            return clause_candidates[0][1]
+
+        # Priority 4: Closest raw segment boundary
         closest_boundary = segments[0]["start"]
         min_dist = float("inf")
-
         for seg in segments:
-            # Check segment start
-            dist_start = abs(seg["start"] - target_time)
-            if dist_start < min_dist:
-                min_dist = dist_start
-                closest_boundary = seg["start"]
-
-            # Check segment end
-            dist_end = abs(seg["end"] - target_time)
-            if dist_end < min_dist:
-                min_dist = dist_end
-                closest_boundary = seg["end"]
+            for b in (seg.get("start", 0.0), seg.get("end", 0.0)):
+                d = abs(b - target_time)
+                if d < min_dist:
+                    min_dist = d
+                    closest_boundary = b
 
         return float(closest_boundary)
 
