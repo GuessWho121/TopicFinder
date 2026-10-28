@@ -105,6 +105,8 @@ def launch_app():
 
     cmd = [
         sys.executable,
+        "-X",
+        "utf8",
         "-m",
         "streamlit",
         "run",
@@ -119,8 +121,12 @@ def launch_app():
         "false",
     ]
 
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+
     try:
-        subprocess.run(cmd, cwd=str(_ROOT))
+        subprocess.run(cmd, cwd=str(_ROOT), env=env)
     except KeyboardInterrupt:
         print("\n[TopicFinder] Dashboard stopped.")
 

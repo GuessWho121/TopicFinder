@@ -149,7 +149,7 @@ def probe_duration(media_path: str | Path, *, ffprobe_bin: str | None = None) ->
             ffprobe, "-v", "error", "-show_entries", "format=duration",
             "-of", "json", str(path),
         ]
-        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
         if completed.returncode:
             raise AudioProcessingError(completed.stderr.strip() or "ffprobe failed.")
         try:
@@ -162,7 +162,7 @@ def probe_duration(media_path: str | Path, *, ffprobe_bin: str | None = None) ->
         ffmpeg = _find_ffmpeg()
         completed = subprocess.run(
             [ffmpeg, "-i", str(path)],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
         )
         # ffmpeg -i always exits non-zero when no output is given; use stderr
         match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", completed.stderr)
@@ -205,7 +205,7 @@ def normalize_audio(
         "-vn", "-ac", str(channels), "-ar", str(sample_rate), "-c:a", "pcm_s16le",
         str(target),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if completed.returncode or not target.is_file() or target.stat().st_size == 0:
         message = completed.stderr.strip() or "FFmpeg did not create normalized audio."
         raise AudioProcessingError(message)
